@@ -6,6 +6,7 @@ import (
 	"image"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,11 +15,29 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
-func buildAction(ctx *cli.Context) error {
-	if ctx.NArg() != 2 {
-		return errors.New("build requires 2 arguments, see help build")
+func buildMCM(ctx *cli.Context, chars map[int]*MCMChar) error {
+	output := ctx.Args().Get(1)
+	f, err := openOutputFile(output)
+	if err != nil {
+		return err
 	}
-	dir := ctx.Args().Get(0)
+	enc := &Encoder{
+		Chars: chars,
+		Fill:  !ctx.Bool("no-blanks"),
+	}
+	if err := enc.Encode(f); err != nil {
+		// Remove the file, since it can't be
+		// a proper .mcm at this point
+		os.Remove(output)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func buildFromDirAction(ctx *cli.Context, dir string) error {
 	entries, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return err
@@ -81,56 +100,96 @@ func buildAction(ctx *cli.Context) error {
 			for jj := 0; jj < h; jj++ {
 				for ii := 0; ii < w; ii++ {
 					chNum := nums[jj][ii]
+					if _, found := chars[chNum]; found {
+						return fmt.Errorf("duplicate character %d", chNum)
+					}
 					x0 := bounds.Min.X + ii*charWidth
 					y0 := bounds.Min.Y + jj*charHeight
 					if debugFlag {
 						log.Printf("importing char %d from image %v @%d,%d", chNum, name, x0, y0)
 					}
-					builder.Reset()
-					for y := y0; y < y0+charHeight; y++ {
-						for x := x0; x < x0+charWidth; x++ {
-							r, g, b, a := im.At(x, y).RGBA()
-							var p MCMPixel
-							switch {
-							case r == 0 && g == 0 && b == 0 && a == 65535:
-								p = MCMPixelBlack
-							case r == 65535 && g == 65535 && b == 65535 && a == 65535:
-								p = MCMPixelWhite
-							default:
-								p = MCMPixelTransparent
-							}
-							builder.AppendPixel(p)
-						}
-					}
-					for !builder.IsComplete() {
-						builder.AppendPixel(MCMPixelTransparent)
-					}
-					if _, found := chars[chNum]; found {
-						return fmt.Errorf("duplicate character %d", chNum)
+					if err := builder.SetImage(im, x0, y0); err != nil {
+						return err
 					}
 					chars[chNum] = builder.Char()
-					builder.Reset()
 				}
 			}
 		}
 	}
-	output := ctx.Args().Get(1)
-	f, err := openOutputFile(output)
+	return buildMCM(ctx, chars)
+}
+
+type subImager interface {
+	SubImage(r image.Rectangle) image.Image
+}
+
+func buildFromPNGAction(ctx *cli.Context, filename string) error {
+	cols := ctx.Int("columns")
+	margin := ctx.Int("margin")
+	rows := int(math.Ceil(float64(mcmCharNum) / float64(cols)))
+	imageWidth := (charWidth+margin)*cols + margin
+	imageHeight := (charHeight+margin)*rows + margin
+
+	chars := make(map[int]*MCMChar)
+	var builder charBuilder
+
+	f, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
-	enc := &Encoder{
-		Chars: chars,
-		Fill:  !ctx.Bool("no-blanks"),
-	}
-	if err := enc.Encode(f); err != nil {
-		// Remove the file, since it can't be
-		// a proper .mcm at this point
-		os.Remove(output)
+	defer f.Close()
+
+	img, imfmt, err := image.Decode(f)
+	if err != nil {
 		return err
 	}
-	if err := f.Close(); err != nil {
+	if imfmt != "png" {
+		return fmt.Errorf("%s: invalid image format %s, must be png", filename, imfmt)
+	}
+
+	bounds := img.Bounds()
+	if bounds.Dx() != imageWidth {
+		return fmt.Errorf("invalid image width %d, must be %d", bounds.Dx(), imageWidth)
+	}
+	if bounds.Dy() != imageHeight {
+		return fmt.Errorf("invalid image height %d, must be %d", bounds.Dy(), imageHeight)
+	}
+
+	for ii := 0; ii < cols; ii++ {
+		for jj := 0; jj < rows; jj++ {
+			leftX := ii*(charWidth+margin) + margin
+			rightX := leftX + charWidth + margin
+			topY := jj*(charHeight+margin) + margin
+			bottomY := topY + charHeight + margin
+
+			chNum := jj*cols + ii
+
+			if debugFlag {
+				log.Printf("importing char %d from image %v @%d,%d", chNum, filename, leftX, topY)
+			}
+
+			r := image.Rect(leftX, topY, rightX, bottomY)
+			sub := img.(subImager).SubImage(r)
+			if err := builder.SetImage(sub, 0, 0); err != nil {
+				return err
+			}
+			chars[chNum] = builder.Char()
+		}
+	}
+	return buildMCM(ctx, chars)
+}
+
+func buildAction(ctx *cli.Context) error {
+	if ctx.NArg() != 2 {
+		return errors.New("build requires 2 arguments, see help build")
+	}
+	input := ctx.Args().Get(0)
+	st, err := os.Stat(input)
+	if err != nil {
 		return err
 	}
-	return nil
+	if st.IsDir() {
+		return buildFromDirAction(ctx, input)
+	}
+	return buildFromPNGAction(ctx, input)
 }

@@ -6,6 +6,11 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
+const (
+	defaultMargin  = 1
+	defaultColumns = 16
+)
+
 var (
 	debugFlag = false
 )
@@ -41,12 +46,22 @@ func main() {
 		},
 		{
 			Name:      "build",
-			Usage:     "Build a .mcm from the files in the given directory",
-			ArgsUsage: "<input-dir> <output.mcm>",
+			Usage:     "Build a .mcm from the files in the given directory or .png file",
+			ArgsUsage: "<input> <output.mcm>",
 			Flags: []cli.Flag{
 				cli.BoolFlag{
 					Name:  "no-blanks, b",
-					Usage: "Don't fill missing characters with blanks",
+					Usage: "Don't fill missing characters with blanks (used only for directory input)",
+				},
+				cli.IntFlag{
+					Name:  "margin, m",
+					Value: defaultMargin,
+					Usage: "Margin between each character (used only for image input)",
+				},
+				cli.IntFlag{
+					Name:  "columns, c",
+					Value: defaultColumns,
+					Usage: "Number of columns in the output image (used onlyt for image input)",
 				},
 			},
 			Action: buildAction,
@@ -58,12 +73,12 @@ func main() {
 			Flags: []cli.Flag{
 				cli.IntFlag{
 					Name:  "margin, m",
-					Value: 1,
+					Value: defaultMargin,
 					Usage: "Margin between each character",
 				},
 				cli.IntFlag{
 					Name:  "columns, c",
-					Value: 16,
+					Value: defaultColumns,
 					Usage: "Number of columns in the output image",
 				},
 			},

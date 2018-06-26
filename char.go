@@ -170,3 +170,29 @@ func (b *charBuilder) AppendPixel(p MCMPixel) error {
 	}
 	return nil
 }
+
+func (b *charBuilder) SetImage(im image.Image, x0, y0 int) error {
+	b.Reset()
+	bounds := im.Bounds()
+	for y := y0; y < y0+charHeight; y++ {
+		for x := x0; x < x0+charWidth; x++ {
+			px := bounds.Min.X + x
+			py := bounds.Min.Y + y
+			r, g, bl, a := im.At(px, py).RGBA()
+			var p MCMPixel
+			switch {
+			case r == 0 && g == 0 && bl == 0 && a == 65535:
+				p = MCMPixelBlack
+			case r == 65535 && g == 65535 && bl == 65535 && a == 65535:
+				p = MCMPixelWhite
+			default:
+				p = MCMPixelTransparent
+			}
+			b.AppendPixel(p)
+		}
+	}
+	for !b.IsComplete() {
+		b.AppendPixel(MCMPixelTransparent)
+	}
+	return nil
+}
