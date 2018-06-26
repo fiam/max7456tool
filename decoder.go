@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	max7456Hdr = "MAX7456\r\n"
+	max7456Hdr    = "MAX7456\r\n"
+	max7456AltHdr = "MAX7456\n"
 )
 
 // MCMDecoder decodes a .mcm file into its characters.
@@ -40,7 +41,7 @@ func NewDecoder(r io.Reader) (*MCMDecoder, error) {
 	if err != nil {
 		return nil, err
 	}
-	if hdr != max7456Hdr {
+	if hdr != max7456Hdr && hdr != max7456AltHdr {
 		return nil, fmt.Errorf("unknown character map header %q", hdr)
 	}
 	var builder charBuilder
