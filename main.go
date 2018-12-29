@@ -61,7 +61,7 @@ func main() {
 				cli.IntFlag{
 					Name:  "columns, c",
 					Value: defaultColumns,
-					Usage: "Number of columns in the output image (used onlyt for image input)",
+					Usage: "Number of columns in the output image (used only for image input)",
 				},
 			},
 			Action: buildAction,
