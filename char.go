@@ -13,10 +13,13 @@ const (
 	// See type MCMChar
 	minCharBytes = 54
 	charBytes    = 64
+
+	// all pixels = 01
+	mcmTransparentByte = 85
 )
 
 var (
-	blankCharacter = constantChar(85) // all pixels = 01
+	blankCharacter = constantChar(mcmTransparentByte)
 )
 
 // MCMPixel represents a pixel in a character. Each pixel must be one

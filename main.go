@@ -63,6 +63,17 @@ func main() {
 					Value: defaultColumns,
 					Usage: "Number of columns in the output image (used only for image input)",
 				},
+				cli.StringFlag{
+					Name:  "metadata, md",
+					Value: "",
+					Usage: "Metadata to add to the font. Metadata format is XXX=[(b|l)(i|u)(8|16|32|64):v]... where:\n" +
+						"\tXXX represents a character number\n" +
+						"\t(b|l)(i|u)(8|16|32|64) indicates the endianess, data type and bit size of the value\n" +
+						"\tv represents the value to encode\n" +
+						"\tValues encoded sequentially into the same character are separeted by ','" +
+						"\tMetadata characters are separated by '-'\n" +
+						"\tFor example: -md 255=lu8:3,li32:17-254=lu64:3",
+				},
 			},
 			Action: buildAction,
 		},

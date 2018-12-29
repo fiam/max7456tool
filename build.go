@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
@@ -15,7 +17,15 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
-func buildMCM(ctx *cli.Context, chars map[int]*MCMChar) error {
+func buildMCM(ctx *cli.Context, chars map[int]*MCMChar, meta *fontMetadata) error {
+	if meta != nil {
+		for k, v := range meta.data {
+			if _, found := chars[k]; found {
+				return fmt.Errorf("character %d has both data and metadata", k)
+			}
+			chars[k] = v
+		}
+	}
 	output := ctx.Args().Get(1)
 	f, err := openOutputFile(output)
 	if err != nil {
@@ -37,7 +47,7 @@ func buildMCM(ctx *cli.Context, chars map[int]*MCMChar) error {
 	return nil
 }
 
-func buildFromDirAction(ctx *cli.Context, dir string) error {
+func buildFromDirAction(ctx *cli.Context, dir string, meta *fontMetadata) error {
 	entries, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return err
@@ -116,14 +126,14 @@ func buildFromDirAction(ctx *cli.Context, dir string) error {
 			}
 		}
 	}
-	return buildMCM(ctx, chars)
+	return buildMCM(ctx, chars, meta)
 }
 
 type subImager interface {
 	SubImage(r image.Rectangle) image.Image
 }
 
-func buildFromPNGAction(ctx *cli.Context, filename string) error {
+func buildFromPNGAction(ctx *cli.Context, filename string, meta *fontMetadata) error {
 	cols := ctx.Int("columns")
 	margin := ctx.Int("margin")
 	rows := int(math.Ceil(float64(mcmCharNum) / float64(cols)))
@@ -176,7 +186,69 @@ func buildFromPNGAction(ctx *cli.Context, filename string) error {
 			chars[chNum] = builder.Char()
 		}
 	}
-	return buildMCM(ctx, chars)
+	return buildMCM(ctx, chars, meta)
+}
+
+type fontMetadata struct {
+	data map[int]*MCMChar
+}
+
+func buildMetadata(metadata string) (*fontMetadata, error) {
+	meta := &fontMetadata{
+		data: make(map[int]*MCMChar),
+	}
+	for _, c := range strings.Split(metadata, "-") {
+		parts := strings.SplitN(c, "=", 2)
+		ch, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid metadata character number %q: %v", parts[0], err)
+		}
+		var buf bytes.Buffer
+		for _, p := range strings.Split(parts[1], ",") {
+			vparts := strings.SplitN(p, ":", 2)
+			vtyp := strings.ToLower(vparts[0])
+			var byteOrder binary.ByteOrder
+			switch vtyp[0] {
+			case 'l':
+				byteOrder = binary.LittleEndian
+			case 'b':
+				byteOrder = binary.BigEndian
+			}
+			v, err := strconv.ParseInt(vparts[1], 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value %q: %v", vparts[1], err)
+			}
+			var ev interface{}
+			switch vtyp[1:] {
+			case "u8":
+				ev = uint8(v)
+			case "i8":
+				ev = int8(v)
+			case "u16":
+				ev = uint16(v)
+			case "i16":
+				ev = int16(v)
+			case "u32":
+				ev = uint32(v)
+			case "i32":
+				ev = int32(v)
+			case "u64":
+				ev = uint64(v)
+			case "i64":
+				ev = int64(v)
+			}
+			if err := binary.Write(&buf, byteOrder, ev); err != nil {
+				return nil, err
+			}
+		}
+		for buf.Len() < charBytes {
+			buf.WriteByte(mcmTransparentByte)
+		}
+		meta.data[ch] = &MCMChar{
+			data: buf.Bytes(),
+		}
+	}
+	return meta, nil
 }
 
 func buildAction(ctx *cli.Context) error {
@@ -188,8 +260,15 @@ func buildAction(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	if st.IsDir() {
-		return buildFromDirAction(ctx, input)
+	var metadata *fontMetadata
+	if m := ctx.String("metadata"); m != "" {
+		metadata, err = buildMetadata(m)
+		if err != nil {
+			return err
+		}
 	}
-	return buildFromPNGAction(ctx, input)
+	if st.IsDir() {
+		return buildFromDirAction(ctx, input, metadata)
+	}
+	return buildFromPNGAction(ctx, input, metadata)
 }
