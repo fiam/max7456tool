@@ -222,6 +222,8 @@ func buildMetadata(metadata string) (*fontMetadata, error) {
 				byteOrder = binary.LittleEndian
 			case 'b':
 				byteOrder = binary.BigEndian
+			default:
+				return nil, fmt.Errorf("unknown endianess %q", string(vtyp[0]))
 			}
 			v, err := strconv.ParseInt(vparts[1], 10, 64)
 			if err != nil {
@@ -245,6 +247,8 @@ func buildMetadata(metadata string) (*fontMetadata, error) {
 				ev = uint64(v)
 			case "i64":
 				ev = int64(v)
+			default:
+				return nil, fmt.Errorf("unknown metadata type %q", vtyp[1:])
 			}
 			if err := binary.Write(&buf, byteOrder, ev); err != nil {
 				return nil, err
