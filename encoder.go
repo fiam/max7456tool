@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	mcmCharNum = 256
+	mcmCharNum         = 256
+	mcmExtendedCharNum = 512
 )
 
 type Encoder struct {
@@ -15,16 +16,33 @@ type Encoder struct {
 	Fill  bool
 }
 
-func (e *Encoder) Encode(w io.Writer) error {
+func (e *Encoder) isExtended() bool {
 	for k := range e.Chars {
 		if k >= mcmCharNum {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Encoder) charNum() int {
+	if e.isExtended() {
+		return mcmExtendedCharNum
+	}
+	return mcmCharNum
+}
+
+func (e *Encoder) Encode(w io.Writer) error {
+	charNum := e.charNum()
+	for k := range e.Chars {
+		if k >= charNum {
 			return fmt.Errorf("invalid character number %d, max is %d", k, mcmCharNum-1)
 		}
 	}
 	if _, err := io.WriteString(w, max7456Hdr); err != nil {
 		return err
 	}
-	for ii := 0; ii < mcmCharNum; ii++ {
+	for ii := 0; ii < charNum; ii++ {
 		c := e.Chars[ii]
 		if c == nil {
 			if !e.Fill {

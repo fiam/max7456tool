@@ -137,8 +137,10 @@ func buildFromPNGAction(ctx *cli.Context, filename string, meta *fontMetadata) e
 	cols := ctx.Int("columns")
 	margin := ctx.Int("margin")
 	rows := int(math.Ceil(float64(mcmCharNum) / float64(cols)))
+	extendedRows := int(math.Ceil(float64(mcmExtendedCharNum) / float64(cols)))
 	imageWidth := (charWidth+margin)*cols + margin
 	imageHeight := (charHeight+margin)*rows + margin
+	extendedImageHeight := (charHeight+margin)*extendedRows + margin
 
 	chars := make(map[int]*MCMChar)
 	var builder charBuilder
@@ -162,7 +164,11 @@ func buildFromPNGAction(ctx *cli.Context, filename string, meta *fontMetadata) e
 		return fmt.Errorf("invalid image width %d, must be %d", bounds.Dx(), imageWidth)
 	}
 	if bounds.Dy() != imageHeight {
-		return fmt.Errorf("invalid image height %d, must be %d", bounds.Dy(), imageHeight)
+		if bounds.Dy() != extendedImageHeight {
+			return fmt.Errorf("invalid image height %d, must be %d (%d characters) or %d (%d characters)",
+				bounds.Dy(), imageHeight, mcmCharNum, extendedImageHeight, mcmExtendedCharNum)
+		}
+		rows = extendedRows
 	}
 
 	for ii := 0; ii < cols; ii++ {
