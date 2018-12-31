@@ -183,7 +183,10 @@ func buildFromPNGAction(ctx *cli.Context, filename string, meta *fontMetadata) e
 			if err := builder.SetImage(sub, 0, 0); err != nil {
 				return err
 			}
-			chars[chNum] = builder.Char()
+			chr := builder.Char()
+			if !chr.isBlank() {
+				chars[chNum] = chr
+			}
 		}
 	}
 	return buildMCM(ctx, chars, meta)
