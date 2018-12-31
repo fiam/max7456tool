@@ -17,7 +17,7 @@ var (
 
 func main() {
 	app := cli.NewApp()
-	app.Version = "0.2"
+	app.Version = "0.3"
 	app.Usage = "tool for managing .mcm character sets for MAX7456"
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
