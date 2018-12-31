@@ -12,7 +12,7 @@ var (
 )
 
 func openOutputFile(filename string) (*os.File, error) {
-	flags := os.O_WRONLY | os.O_CREATE
+	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	if !forceFlag {
 		flags |= os.O_EXCL
 	}
