@@ -47,6 +47,48 @@ func buildMCM(ctx *cli.Context, chars map[int]*MCMChar, meta *fontMetadata) erro
 	return nil
 }
 
+func parseFilenameCharacterNums(nonExt string, im image.Image) ([]int, error) {
+	px := im.Bounds().Dx()
+	if px%charWidth != 0 {
+		return nil, fmt.Errorf("invalid image width %d, must be a multiple of %d", px, charWidth)
+	}
+	sx := px / charWidth
+
+	py := im.Bounds().Dy()
+	if py%charHeight != 0 {
+		return nil, fmt.Errorf("invalid image height %d, must be a multiple of %d", py, charHeight)
+	}
+	sy := py / charHeight
+
+	total := sx * sy
+
+	segments := strings.Split(nonExt, "-")
+	var count int
+	var nums []int
+	for _, s := range segments {
+		items := strings.Split(s, "_")
+		prev := -1
+		for _, v := range items {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid number %q in image filename %q: %v", v, nonExt, err)
+			}
+			if prev >= 0 {
+				for ii := prev + 1; ii <= n; ii++ {
+					nums = append(nums, ii)
+				}
+			} else {
+				nums = append(nums, n)
+			}
+			prev = n
+		}
+	}
+	if len(nums) != total {
+		return nil, fmt.Errorf("image with size %dx%d must contain %d characters, only %d declared", px, py, total, count)
+	}
+	return nums, nil
+}
+
 func buildFromDirAction(ctx *cli.Context, dir string, meta *fontMetadata) error {
 	entries, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -61,28 +103,6 @@ func buildFromDirAction(ctx *cli.Context, dir string, meta *fontMetadata) error 
 		name := e.Name()
 		ext := filepath.Ext(name)
 		if strings.ToLower(ext) == ".png" {
-			nonExt := name[:len(name)-len(ext)]
-			// Parse the name. It might contain multiple images
-			lines := strings.Split(nonExt, "_")
-			var nums [][]int
-			w := 0
-			h := len(lines)
-			for _, line := range lines {
-				var lineNums []int
-				items := strings.Split(line, "-")
-				if w != 0 && w != len(items) {
-					return fmt.Errorf("uneven lines in filename %q: %d vs %d", nonExt, w, len(items))
-				}
-				w = len(items)
-				for _, v := range items {
-					n, err := strconv.Atoi(v)
-					if err != nil {
-						return fmt.Errorf("invalid number %q if image filename %q: %v", v, nonExt, err)
-					}
-					lineNums = append(lineNums, n)
-				}
-				nums = append(nums, lineNums)
-			}
 			// Decode the image
 			filename := filepath.Join(dir, name)
 			imf, err := os.Open(filename)
@@ -99,30 +119,31 @@ func buildFromDirAction(ctx *cli.Context, dir string, meta *fontMetadata) error 
 			if imfmt != "png" {
 				return fmt.Errorf("%s: invalid image format %s, must be png", filename, imfmt)
 			}
-			if im.Bounds().Dx() != w*charWidth {
-				return fmt.Errorf("image with %d characters per line must have a width of %d, not %d", w, w*charWidth, im.Bounds().Dx())
-			}
-			if im.Bounds().Dy() != h*charHeight {
-				return fmt.Errorf("image with %d characters per column must have a height of %d, not %d", h, h*charHeight, im.Bounds().Dy())
+			nonExt := name[:len(name)-len(ext)]
+			// Parse the name. It might contain multiple characters
+			nums, err := parseFilenameCharacterNums(nonExt, im)
+			if err != nil {
+				return err
 			}
 			bounds := im.Bounds()
+			xw := bounds.Dx() / charWidth
 			// Import each character
-			for jj := 0; jj < h; jj++ {
-				for ii := 0; ii < w; ii++ {
-					chNum := nums[jj][ii]
-					if _, found := chars[chNum]; found {
-						return fmt.Errorf("duplicate character %d", chNum)
-					}
-					x0 := bounds.Min.X + ii*charWidth
-					y0 := bounds.Min.Y + jj*charHeight
-					if debugFlag {
-						log.Printf("importing char %d from image %v @%d,%d", chNum, name, x0, y0)
-					}
-					if err := builder.SetImage(im, x0, y0); err != nil {
-						return err
-					}
-					chars[chNum] = builder.Char()
+			for ii, chNum := range nums {
+				if _, found := chars[chNum]; found {
+					return fmt.Errorf("duplicate character %d", chNum)
 				}
+				xc := ii % xw
+				yc := ii / xw
+				x0 := bounds.Min.X + xc*charWidth
+				y0 := bounds.Min.Y + yc*charHeight
+				if debugFlag {
+					log.Printf("importing char %d from image %v @%d,%d", chNum, name, x0, y0)
+				}
+				if err := builder.SetImage(im, x0, y0); err != nil {
+					return err
+				}
+				chars[chNum] = builder.Char()
+
 			}
 		}
 	}
