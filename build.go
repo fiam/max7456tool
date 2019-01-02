@@ -63,7 +63,6 @@ func parseFilenameCharacterNums(nonExt string, im image.Image) ([]int, error) {
 	total := sx * sy
 
 	segments := strings.Split(nonExt, "-")
-	var count int
 	var nums []int
 	for _, s := range segments {
 		items := strings.Split(s, "_")
@@ -84,7 +83,7 @@ func parseFilenameCharacterNums(nonExt string, im image.Image) ([]int, error) {
 		}
 	}
 	if len(nums) != total {
-		return nil, fmt.Errorf("image with size %dx%d must contain %d characters, only %d declared", px, py, total, count)
+		return nil, fmt.Errorf("image %q with size %dx%d must contain %d characters, %d declared", nonExt, px, py, total, len(nums))
 	}
 	return nums, nil
 }
