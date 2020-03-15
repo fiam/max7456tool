@@ -14,10 +14,17 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fiam/max7456tool/mcm"
+
 	"gopkg.in/urfave/cli.v1"
 )
 
-func buildMCM(ctx *cli.Context, chars map[int]*MCMChar, meta *fontMetadata) error {
+const (
+	// all pixels = 01
+	mcmTransparentByte = 85
+)
+
+func buildMCM(ctx *cli.Context, chars map[int]*mcm.Char, meta *fontMetadata) error {
 	if meta != nil {
 		for k, v := range meta.data {
 			if _, found := chars[k]; found {
@@ -31,7 +38,7 @@ func buildMCM(ctx *cli.Context, chars map[int]*MCMChar, meta *fontMetadata) erro
 	if err != nil {
 		return err
 	}
-	enc := &Encoder{
+	enc := &mcm.Encoder{
 		Chars: chars,
 		Fill:  !ctx.Bool("no-blanks"),
 	}
@@ -49,16 +56,16 @@ func buildMCM(ctx *cli.Context, chars map[int]*MCMChar, meta *fontMetadata) erro
 
 func parseFilenameCharacterNums(nonExt string, im image.Image) ([]int, error) {
 	px := im.Bounds().Dx()
-	if px%charWidth != 0 {
-		return nil, fmt.Errorf("invalid image width %d, must be a multiple of %d", px, charWidth)
+	if px%mcm.CharWidth != 0 {
+		return nil, fmt.Errorf("invalid image width %d, must be a multiple of %d", px, mcm.CharWidth)
 	}
-	sx := px / charWidth
+	sx := px / mcm.CharWidth
 
 	py := im.Bounds().Dy()
-	if py%charHeight != 0 {
-		return nil, fmt.Errorf("invalid image height %d, must be a multiple of %d", py, charHeight)
+	if py%mcm.CharHeight != 0 {
+		return nil, fmt.Errorf("invalid image height %d, must be a multiple of %d", py, mcm.CharHeight)
 	}
-	sy := py / charHeight
+	sy := py / mcm.CharHeight
 
 	total := sx * sy
 
@@ -93,8 +100,7 @@ func buildFromDirAction(ctx *cli.Context, dir string, meta *fontMetadata) error 
 	if err != nil {
 		return err
 	}
-	chars := make(map[int]*MCMChar)
-	var builder charBuilder
+	chars := make(map[int]*mcm.Char)
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -125,7 +131,7 @@ func buildFromDirAction(ctx *cli.Context, dir string, meta *fontMetadata) error 
 				return err
 			}
 			bounds := im.Bounds()
-			xw := bounds.Dx() / charWidth
+			xw := bounds.Dx() / mcm.CharWidth
 			// Import each character
 			for ii, chNum := range nums {
 				if _, found := chars[chNum]; found {
@@ -133,15 +139,16 @@ func buildFromDirAction(ctx *cli.Context, dir string, meta *fontMetadata) error 
 				}
 				xc := ii % xw
 				yc := ii / xw
-				x0 := bounds.Min.X + xc*charWidth
-				y0 := bounds.Min.Y + yc*charHeight
+				x0 := bounds.Min.X + xc*mcm.CharWidth
+				y0 := bounds.Min.Y + yc*mcm.CharHeight
 				if debugFlag {
 					log.Printf("importing char %d from image %v @%d,%d", chNum, name, x0, y0)
 				}
-				if err := builder.SetImage(im, x0, y0); err != nil {
+				mcmCh, err := mcm.NewCharFromImage(im, x0, y0)
+				if err != nil {
 					return err
 				}
-				chars[chNum] = builder.Char()
+				chars[chNum] = mcmCh
 
 			}
 		}
@@ -156,14 +163,13 @@ type subImager interface {
 func buildFromPNGAction(ctx *cli.Context, filename string, meta *fontMetadata) error {
 	cols := ctx.Int("columns")
 	margin := ctx.Int("margin")
-	rows := int(math.Ceil(float64(mcmCharNum) / float64(cols)))
-	extendedRows := int(math.Ceil(float64(mcmExtendedCharNum) / float64(cols)))
-	imageWidth := (charWidth+margin)*cols + margin
-	imageHeight := (charHeight+margin)*rows + margin
-	extendedImageHeight := (charHeight+margin)*extendedRows + margin
+	rows := int(math.Ceil(float64(mcm.CharNum) / float64(cols)))
+	extendedRows := int(math.Ceil(float64(mcm.ExtendedCharNum) / float64(cols)))
+	imageWidth := (mcm.CharWidth+margin)*cols + margin
+	imageHeight := (mcm.CharHeight+margin)*rows + margin
+	extendedImageHeight := (mcm.CharHeight+margin)*extendedRows + margin
 
-	chars := make(map[int]*MCMChar)
-	var builder charBuilder
+	chars := make(map[int]*mcm.Char)
 
 	f, err := os.Open(filename)
 	if err != nil {
@@ -186,17 +192,17 @@ func buildFromPNGAction(ctx *cli.Context, filename string, meta *fontMetadata) e
 	if bounds.Dy() != imageHeight {
 		if bounds.Dy() != extendedImageHeight {
 			return fmt.Errorf("invalid image height %d, must be %d (%d characters) or %d (%d characters)",
-				bounds.Dy(), imageHeight, mcmCharNum, extendedImageHeight, mcmExtendedCharNum)
+				bounds.Dy(), imageHeight, mcm.CharNum, extendedImageHeight, mcm.ExtendedCharNum)
 		}
 		rows = extendedRows
 	}
 
 	for ii := 0; ii < cols; ii++ {
 		for jj := 0; jj < rows; jj++ {
-			leftX := ii*(charWidth+margin) + margin
-			rightX := leftX + charWidth + margin
-			topY := jj*(charHeight+margin) + margin
-			bottomY := topY + charHeight + margin
+			leftX := ii*(mcm.CharWidth+margin) + margin
+			rightX := leftX + mcm.CharWidth + margin
+			topY := jj*(mcm.CharHeight+margin) + margin
+			bottomY := topY + mcm.CharHeight + margin
 
 			chNum := jj*cols + ii
 
@@ -206,11 +212,11 @@ func buildFromPNGAction(ctx *cli.Context, filename string, meta *fontMetadata) e
 
 			r := image.Rect(leftX, topY, rightX, bottomY)
 			sub := img.(subImager).SubImage(r)
-			if err := builder.SetImage(sub, 0, 0); err != nil {
+			chr, err := mcm.NewCharFromImage(sub, 0, 0)
+			if err != nil {
 				return err
 			}
-			chr := builder.Char()
-			if !chr.isBlank() {
+			if !chr.IsBlank() {
 				chars[chNum] = chr
 			}
 		}
@@ -219,12 +225,12 @@ func buildFromPNGAction(ctx *cli.Context, filename string, meta *fontMetadata) e
 }
 
 type fontMetadata struct {
-	data map[int]*MCMChar
+	data map[int]*mcm.Char
 }
 
 func buildMetadata(metadata string) (*fontMetadata, error) {
 	meta := &fontMetadata{
-		data: make(map[int]*MCMChar),
+		data: make(map[int]*mcm.Char),
 	}
 	for _, c := range strings.Split(metadata, "-") {
 		parts := strings.SplitN(c, "=", 2)
@@ -274,12 +280,14 @@ func buildMetadata(metadata string) (*fontMetadata, error) {
 				return nil, err
 			}
 		}
-		for buf.Len() < charBytes {
+		for buf.Len() < mcm.CharBytes {
 			buf.WriteByte(mcmTransparentByte)
 		}
-		meta.data[ch] = &MCMChar{
-			data: buf.Bytes(),
+		mcmCh, err := mcm.NewCharFromData(buf.Bytes())
+		if err != nil {
+			return nil, err
 		}
+		meta.data[ch] = mcmCh
 	}
 	return meta, nil
 }

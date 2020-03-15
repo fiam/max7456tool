@@ -1,4 +1,4 @@
-package main
+package mcm
 
 import (
 	"bufio"
@@ -13,29 +13,29 @@ const (
 	max7456AltHdr = "MAX7456\n"
 )
 
-// MCMDecoder decodes a .mcm file into its characters.
+// Decoder decodes a .mcm file into its characters.
 // Use NewDecoder to initialize a decoder.
-type MCMDecoder struct {
-	chars []*MCMChar
+type Decoder struct {
+	chars []*Char
 }
 
 // NChars returns the number of characters found in the
 // character map. Must always be 256 for standard
 // character maps.
-func (d *MCMDecoder) NChars() int {
+func (d *Decoder) NChars() int {
 	return len(d.chars)
 }
 
 // CharAt returns the character at the given index.
-func (d *MCMDecoder) CharAt(i int) *MCMChar {
+func (d *Decoder) CharAt(i int) *Char {
 	return d.chars[i]
 }
 
-// NewDecoder initializes an MCMDecoder reading the
+// NewDecoder initializes an Decoder reading the
 // data from the given reader. The data must represent
 // a well formed MAX7456 character map. Otherwise, this
 // function will return an error.
-func NewDecoder(r io.Reader) (*MCMDecoder, error) {
+func NewDecoder(r io.Reader) (*Decoder, error) {
 	br := bufio.NewReader(r)
 	hdr, err := br.ReadString('\n')
 	if err != nil {
@@ -46,13 +46,13 @@ func NewDecoder(r io.Reader) (*MCMDecoder, error) {
 	}
 	var builder charBuilder
 	builder.Reset()
-	var chars []*MCMChar
+	var chars []*Char
 	appendPixel := func(s string) error {
 		val, err := strconv.ParseUint(s, 2, 32)
 		if err != nil {
 			return err
 		}
-		return builder.AppendPixel(MCMPixel(val))
+		return builder.AppendPixel(Pixel(val))
 	}
 	ii := 2
 	for {
@@ -85,7 +85,7 @@ func NewDecoder(r io.Reader) (*MCMDecoder, error) {
 			builder.Reset()
 		}
 	}
-	return &MCMDecoder{
+	return &Decoder{
 		chars: chars,
 	}, nil
 }

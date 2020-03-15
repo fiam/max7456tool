@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/fiam/max7456tool/mcm"
+
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -19,7 +21,7 @@ func extractAction(ctx *cli.Context) error {
 		return err
 	}
 	defer f.Close()
-	dec, err := NewDecoder(f)
+	dec, err := mcm.NewDecoder(f)
 	if err != nil {
 		return err
 	}
@@ -30,7 +32,7 @@ func extractAction(ctx *cli.Context) error {
 	blanks := ctx.Bool("blanks")
 	for ii := 0; ii < dec.NChars(); ii++ {
 		ch := dec.CharAt(ii)
-		if !blanks && ch.isBlank() {
+		if !blanks && ch.IsBlank() {
 			continue
 		}
 		im := ch.Image(nil)

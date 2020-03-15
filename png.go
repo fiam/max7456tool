@@ -8,6 +8,8 @@ import (
 	"math"
 	"os"
 
+	"github.com/fiam/max7456tool/mcm"
+
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -20,48 +22,48 @@ func pngAction(ctx *cli.Context) error {
 		return err
 	}
 	defer mf.Close()
-	dec, err := NewDecoder(mf)
+	dec, err := mcm.NewDecoder(mf)
 	if err != nil {
 		return err
 	}
 	cols := ctx.Int("columns")
 	margin := ctx.Int("margin")
 	rows := int(math.Ceil(float64(dec.NChars()) / float64(cols)))
-	imageWidth := (charWidth+margin)*cols + margin
-	imageHeight := (charHeight+margin)*rows + margin
+	imageWidth := (mcm.CharWidth+margin)*cols + margin
+	imageHeight := (mcm.CharHeight+margin)*rows + margin
 
 	img := image.NewRGBA(image.Rect(0, 0, imageWidth, imageHeight))
 
 	// Top and left sides of the grid
 	for x := 0; x < imageWidth; x++ {
 		for y := 0; y < margin; y++ {
-			img.Set(x, y, blackColor)
+			img.Set(x, y, mcm.BlackColor)
 		}
 	}
 
 	for x := 0; x < margin; x++ {
 		for y := 0; y < imageHeight; y++ {
-			img.Set(x, y, blackColor)
+			img.Set(x, y, mcm.BlackColor)
 		}
 	}
 
 	// Draw each character
 	for ii := 0; ii < cols; ii++ {
 		for jj := 0; jj < rows; jj++ {
-			leftX := ii*(charWidth+margin) + margin
-			rightX := leftX + charWidth + margin
-			topY := jj*(charHeight+margin) + margin
-			bottomY := topY + charHeight + margin
+			leftX := ii*(mcm.CharWidth+margin) + margin
+			rightX := leftX + mcm.CharWidth + margin
+			topY := jj*(mcm.CharHeight+margin) + margin
+			bottomY := topY + mcm.CharHeight + margin
 			// Draw right line
 			for x := rightX - margin; x < rightX; x++ {
 				for y := topY; y < bottomY; y++ {
-					img.Set(x, y, blackColor)
+					img.Set(x, y, mcm.BlackColor)
 				}
 			}
 			// Draw bottom line
 			for x := leftX; x < rightX; x++ {
 				for y := bottomY - margin; y < bottomY; y++ {
-					img.Set(x, y, blackColor)
+					img.Set(x, y, mcm.BlackColor)
 				}
 			}
 			// Draw character
@@ -69,7 +71,7 @@ func pngAction(ctx *cli.Context) error {
 			if chn >= dec.NChars() {
 				continue
 			}
-			r := image.Rect(leftX, topY, leftX+charWidth, topY+charHeight)
+			r := image.Rect(leftX, topY, leftX+mcm.CharWidth, topY+mcm.CharHeight)
 			ch := dec.CharAt(chn)
 			cim := ch.Image(nil)
 			draw.Draw(img, r, cim, image.ZP, draw.Over)

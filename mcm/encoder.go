@@ -1,4 +1,4 @@
-package main
+package mcm
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ const (
 )
 
 type Encoder struct {
-	Chars map[int]*MCMChar
+	Chars map[int]*Char
 	Fill  bool
 }
 
@@ -51,8 +51,8 @@ func (e *Encoder) Encode(w io.Writer) error {
 			c = blankCharacter
 		}
 		data := c.Data()
-		if len(data) != charBytes {
-			return fmt.Errorf("invalid character length %d (!= %d)", len(data), charBytes)
+		if len(data) != CharBytes {
+			return fmt.Errorf("invalid character length %d (!= %d)", len(data), CharBytes)
 		}
 		for jj, b := range data {
 			if ii > 0 || jj > 0 {
