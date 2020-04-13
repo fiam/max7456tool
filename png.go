@@ -8,9 +8,9 @@ import (
 	"math"
 	"os"
 
-	"github.com/fiam/max7456tool/mcm"
+	"github.com/urfave/cli"
 
-	"gopkg.in/urfave/cli.v1"
+	"github.com/fiam/max7456tool/mcm"
 )
 
 func pngAction(ctx *cli.Context) error {
