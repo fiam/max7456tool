@@ -110,30 +110,61 @@ func (c *Char) ForEachPixel(f func(x, y int, unused bool, p Pixel)) {
 	}
 }
 
-// Image returns a 12x18 image of the character
-func (c *Char) Image(transparent color.Color) image.Image {
-	if isNilColor(transparent) {
-		transparent = DefaultTransparentColor
-	}
+// ImageStrict returns a 12x18 image of the character. If the image contains
+// any transparent pixels and no transparent color has been provided, an
+// error will be returned. Same principle is applied for the undefined
+// color. See Char.Image() for a simpler alternative.
+func (c *Char) ImageStrict(transparent color.Color, undefined color.Color) (image.Image, error) {
 	im := image.NewRGBA(image.Rect(0, 0, CharWidth, CharHeight))
+	var err error
 	c.ForEachPixel(func(x, y int, unused bool, p Pixel) {
+		if err != nil {
+			return
+		}
 		if unused {
 			return
 		}
 		var c color.Color
 		switch p {
 		case PixelTransparent:
+			if isNilColor(transparent) {
+				err = fmt.Errorf("no color was provided for transparent pixel %v @ (%v, %v)", p, x, y)
+				return
+			}
 			c = transparent
 		case PixelBlack:
 			c = BlackColor
 		case PixelWhite:
 			c = WhiteColor
 		default:
-			// Should not happen
-			panic(fmt.Errorf("invalid pixel %v", p))
+			if isNilColor(undefined) {
+				err = fmt.Errorf("no color was provided for undefined pixel %v @ (%v, %v)", p, x, y)
+				return
+			}
+			c = undefined
 		}
 		im.Set(x, y, c)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return im, nil
+}
+
+// Image returns a 12x18 image of the character. Pixels with the
+// 3 value (out of spec but usually considered as transparent) are
+// considered as transparent. For more fine grained behavior, check
+// Char.ImageStrict. If no transparent color is provided,
+// DefaultTransparentColor will be used for transparent pixels.
+func (c *Char) Image(transparent color.Color) image.Image {
+	if isNilColor(transparent) {
+		transparent = DefaultTransparentColor
+	}
+	im, err := c.ImageStrict(transparent, transparent)
+	if err != nil {
+		// Should not happen
+		panic(err)
+	}
 	return im
 }
 
