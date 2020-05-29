@@ -10,7 +10,7 @@ import (
 
 	"github.com/fiam/max7456tool/mcm"
 
-	"gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v2"
 )
 
 func pngAction(ctx *cli.Context) error {

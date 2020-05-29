@@ -2,4 +2,7 @@ module github.com/fiam/max7456tool
 
 go 1.14
 
-require gopkg.in/urfave/cli.v1 v1.20.0
+require (
+	github.com/urfave/cli/v2 v2.2.0
+	gopkg.in/yaml.v2 v2.2.2
+)

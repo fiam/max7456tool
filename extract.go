@@ -9,7 +9,7 @@ import (
 
 	"github.com/fiam/max7456tool/mcm"
 
-	"gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v2"
 )
 
 func extractAction(ctx *cli.Context) error {

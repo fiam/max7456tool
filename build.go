@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
@@ -16,7 +14,7 @@ import (
 
 	"github.com/fiam/max7456tool/mcm"
 
-	"gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli/v2"
 )
 
 const (
@@ -24,13 +22,22 @@ const (
 	mcmTransparentByte = 85
 )
 
-func buildMCM(ctx *cli.Context, chars map[int]*mcm.Char, meta *fontMetadata) error {
-	if meta != nil {
-		for k, v := range meta.data {
-			if _, found := chars[k]; found {
-				return fmt.Errorf("character %d has both data and metadata", k)
+func buildMCM(ctx *cli.Context, chars map[int]*mcm.Char, extra *fontDataSet) error {
+	if extra != nil {
+		for k, v := range extra.Values() {
+			if prev, found := chars[k]; found {
+				repl, err := v.MergeTo(prev)
+				if err != nil {
+					return fmt.Errorf("error merging binary data into existing character %d: %v", k, err)
+				}
+				chars[k] = repl
+			} else {
+				chr, err := v.Char()
+				if err != nil {
+					return fmt.Errorf("error decoding binary character %d: %v", k, err)
+				}
+				chars[k] = chr
 			}
-			chars[k] = v
 		}
 	}
 	output := ctx.Args().Get(1)
@@ -95,7 +102,7 @@ func parseFilenameCharacterNums(nonExt string, im image.Image) ([]int, error) {
 	return nums, nil
 }
 
-func buildFromDirAction(ctx *cli.Context, dir string, meta *fontMetadata) error {
+func buildFromDirAction(ctx *cli.Context, dir string, extra *fontDataSet) error {
 	entries, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return err
@@ -153,14 +160,14 @@ func buildFromDirAction(ctx *cli.Context, dir string, meta *fontMetadata) error 
 			}
 		}
 	}
-	return buildMCM(ctx, chars, meta)
+	return buildMCM(ctx, chars, extra)
 }
 
 type subImager interface {
 	SubImage(r image.Rectangle) image.Image
 }
 
-func buildFromPNGAction(ctx *cli.Context, filename string, meta *fontMetadata) error {
+func buildFromPNGAction(ctx *cli.Context, filename string, extra *fontDataSet) error {
 	cols := ctx.Int("columns")
 	margin := ctx.Int("margin")
 	rows := int(math.Ceil(float64(mcm.CharNum) / float64(cols)))
@@ -221,75 +228,7 @@ func buildFromPNGAction(ctx *cli.Context, filename string, meta *fontMetadata) e
 			}
 		}
 	}
-	return buildMCM(ctx, chars, meta)
-}
-
-type fontMetadata struct {
-	data map[int]*mcm.Char
-}
-
-func buildMetadata(metadata string) (*fontMetadata, error) {
-	meta := &fontMetadata{
-		data: make(map[int]*mcm.Char),
-	}
-	for _, c := range strings.Split(metadata, "-") {
-		parts := strings.SplitN(c, "=", 2)
-		ch, err := strconv.Atoi(parts[0])
-		if err != nil {
-			return nil, fmt.Errorf("invalid metadata character number %q: %v", parts[0], err)
-		}
-		var buf bytes.Buffer
-		for _, p := range strings.Split(parts[1], ",") {
-			vparts := strings.SplitN(p, ":", 2)
-			vtyp := strings.ToLower(vparts[0])
-			var byteOrder binary.ByteOrder
-			switch vtyp[0] {
-			case 'l':
-				byteOrder = binary.LittleEndian
-			case 'b':
-				byteOrder = binary.BigEndian
-			default:
-				return nil, fmt.Errorf("unknown endianess %q", string(vtyp[0]))
-			}
-			v, err := strconv.ParseInt(vparts[1], 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value %q: %v", vparts[1], err)
-			}
-			var ev interface{}
-			switch vtyp[1:] {
-			case "u8":
-				ev = uint8(v)
-			case "i8":
-				ev = int8(v)
-			case "u16":
-				ev = uint16(v)
-			case "i16":
-				ev = int16(v)
-			case "u32":
-				ev = uint32(v)
-			case "i32":
-				ev = int32(v)
-			case "u64":
-				ev = uint64(v)
-			case "i64":
-				ev = int64(v)
-			default:
-				return nil, fmt.Errorf("unknown metadata type %q", vtyp[1:])
-			}
-			if err := binary.Write(&buf, byteOrder, ev); err != nil {
-				return nil, err
-			}
-		}
-		for buf.Len() < mcm.CharBytes {
-			buf.WriteByte(mcmTransparentByte)
-		}
-		mcmCh, err := mcm.NewCharFromData(buf.Bytes())
-		if err != nil {
-			return nil, err
-		}
-		meta.data[ch] = mcmCh
-	}
-	return meta, nil
+	return buildMCM(ctx, chars, extra)
 }
 
 func buildAction(ctx *cli.Context) error {
@@ -301,15 +240,14 @@ func buildAction(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	var metadata *fontMetadata
-	if m := ctx.String("metadata"); m != "" {
-		metadata, err = buildMetadata(m)
-		if err != nil {
+	fontData := newFontDataSet()
+	for _, e := range ctx.StringSlice("extra") {
+		if err := fontData.ParseFile(e); err != nil {
 			return err
 		}
 	}
 	if st.IsDir() {
-		return buildFromDirAction(ctx, input, metadata)
+		return buildFromDirAction(ctx, input, fontData)
 	}
-	return buildFromPNGAction(ctx, input, metadata)
+	return buildFromPNGAction(ctx, input, fontData)
 }
