@@ -22,12 +22,13 @@ const (
 )
 
 var (
-	debugFlag = false
+	debugFlag  = false
+	appVersion string
 )
 
 func main() {
 	app := cli.NewApp()
-	app.Version = "0.5"
+	app.Version = appVersion
 	app.Usage = "tool for managing .mcm character sets for MAX7456"
 	app.Flags = []cli.Flag{
 		&cli.BoolFlag{

@@ -1,0 +1,43 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - 'v*'
+jobs:
+
+  publish:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        go: [1.14]
+    name: ${{ matrix.os }} @ Go ${{ matrix.go }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Set up Go ${{ matrix.go }}
+        uses: actions/setup-go@v1
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Set GOPATH, PATH and ENV
+        run: |
+          echo "::set-env name=GOPATH::$(dirname $GITHUB_WORKSPACE)"
+          echo "::set-env name=GO111MODULE::on"
+          echo "::set-env name=GOPROXY::https://proxy.golang.org"
+          echo "::add-path::$(dirname $GITHUB_WORKSPACE)/bin"
+        shell: bash
+
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Build
+        run: ./make_release.sh
+
+      - name: Upload artifacts
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/*
+          file_glob: true
+          overwrite: true
+          tag: ${{ github.ref }}
