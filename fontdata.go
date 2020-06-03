@@ -253,6 +253,40 @@ func (c *charBinaryData) addValues(m map[interface{}]interface{}, key string, da
 					if err := binary.Write(&buf, bo, int64(i)); err != nil {
 						return err
 					}
+				case "c":
+					vs, ok := vv.(string)
+					if !ok {
+						return fmt.Errorf("argument to c must be a string, it's %v (%T)", vv, vv)
+					}
+					parts := strings.Split(vs, ",")
+					if len(parts) > 4 {
+						return fmt.Errorf("%q contains %d color, the maximum is 4", vs, len(parts))
+					}
+					val := uint8(0)
+					shift := uint(0)
+					for ii, p := range parts {
+						p = strings.TrimSpace(p)
+						var pixel mcm.Pixel
+						switch strings.ToUpper(p) {
+						case "BLACK":
+							pixel = mcm.PixelBlack
+						case "WHITE":
+							pixel = mcm.PixelWhite
+						case "TRANSPARENT":
+							pixel = mcm.PixelTransparent
+						case "GREY":
+							fallthrough
+						case "GRAY":
+							pixel = mcm.PixelGray
+						default:
+							return fmt.Errorf("unknown color %q at position %d", p, ii)
+						}
+						val |= uint8(pixel) << shift
+						shift += 2
+					}
+					if _, err := buf.Write([]byte{val}); err != nil {
+						return err
+					}
 				default:
 					return fmt.Errorf("can't encode value with key %q within %s", ks, key)
 				}

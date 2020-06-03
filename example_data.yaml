@@ -14,6 +14,7 @@
 # lu64: Unsigned 64 bits little endian
 # bi64: Signed 64 bits big endian
 # bu64: Unsigned 64 bits big endian
+# c: Color list separated by commas, up to 4. Valid colors are: WHITE, BLACK, TRANSPARENT, GRAY
 #
 # Some examples:
 #
@@ -23,6 +24,10 @@
     - s: 'o'
     - i8: 13
     - i8: 3
+127:
+  metadata:
+    - s: 'c'
+    - c: WHITE,BLACK,TRANSPARENT,GRAY
 # Generate 2 entire binary characters
 255: &fontmeta
   data:

@@ -45,6 +45,9 @@ const (
 	PixelTransparent = 1
 	// PixelWhite represents a white pixel
 	PixelWhite = 2
+	// PixelGray represents gray in FrSkyOSD, but it's interpreted
+	// as transparent in MAX7456
+	PixelGray = 3
 )
 
 func (p Pixel) isTransparent() bool {
