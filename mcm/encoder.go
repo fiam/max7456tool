@@ -25,7 +25,12 @@ func (e *Encoder) isExtended() bool {
 	return false
 }
 
-func (e *Encoder) charNum() int {
+// CharNum returns the total number of characters this font
+// would have. If no characters > 255 are found, it returns
+// a single page font (256). Otherwise, it returns a double
+// page font (512) since no known devices support more than
+// 512 characters per font.
+func (e *Encoder) CharNum() int {
 	if e.isExtended() {
 		return mcmExtendedCharNum
 	}
@@ -33,7 +38,7 @@ func (e *Encoder) charNum() int {
 }
 
 func (e *Encoder) Encode(w io.Writer) error {
-	charNum := e.charNum()
+	charNum := e.CharNum()
 	for k := range e.Chars {
 		if k >= charNum {
 			return fmt.Errorf("invalid character number %d, max is %d", k, mcmCharNum-1)
