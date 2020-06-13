@@ -22,7 +22,21 @@ const (
 	mcmTransparentByte = 85
 )
 
-func buildMCM(ctx *cli.Context, chars map[int]*mcm.Char, extra *fontDataSet) error {
+type buildOptions struct {
+	NoBlanks bool
+	Margin   int
+	Columns  int
+}
+
+func newBuildOptions(ctx *cli.Context) (*buildOptions, error) {
+	return &buildOptions{
+		NoBlanks: ctx.Bool("no-blanks"),
+		Margin:   ctx.Int("margin"),
+		Columns:  ctx.Int("columns"),
+	}, nil
+}
+
+func buildMCM(output string, chars map[int]*mcm.Char, extra *fontDataSet, opts *buildOptions) error {
 	if extra != nil {
 		for k, v := range extra.Values() {
 			if prev, found := chars[k]; found {
@@ -40,14 +54,13 @@ func buildMCM(ctx *cli.Context, chars map[int]*mcm.Char, extra *fontDataSet) err
 			}
 		}
 	}
-	output := ctx.Args().Get(1)
 	f, err := openOutputFile(output)
 	if err != nil {
 		return err
 	}
 	enc := &mcm.Encoder{
 		Chars: chars,
-		Fill:  !ctx.Bool("no-blanks"),
+		Fill:  !opts.NoBlanks,
 	}
 	if err := enc.Encode(f); err != nil {
 		// Remove the file, since it can't be
@@ -102,7 +115,7 @@ func parseFilenameCharacterNums(nonExt string, im image.Image) ([]int, error) {
 	return nums, nil
 }
 
-func buildFromDirAction(ctx *cli.Context, dir string, extra *fontDataSet) error {
+func buildFromDir(output string, dir string, extra *fontDataSet, opts *buildOptions) error {
 	entries, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return err
@@ -160,16 +173,16 @@ func buildFromDirAction(ctx *cli.Context, dir string, extra *fontDataSet) error 
 			}
 		}
 	}
-	return buildMCM(ctx, chars, extra)
+	return buildMCM(output, chars, extra, opts)
 }
 
 type subImager interface {
 	SubImage(r image.Rectangle) image.Image
 }
 
-func buildFromPNGAction(ctx *cli.Context, filename string, extra *fontDataSet) error {
-	cols := ctx.Int("columns")
-	margin := ctx.Int("margin")
+func buildFromPNG(output string, filename string, extra *fontDataSet, opts *buildOptions) error {
+	cols := opts.Columns
+	margin := opts.Margin
 	rows := int(math.Ceil(float64(mcm.CharNum) / float64(cols)))
 	extendedRows := int(math.Ceil(float64(mcm.ExtendedCharNum) / float64(cols)))
 	imageWidth := (mcm.CharWidth+margin)*cols + margin
@@ -228,26 +241,35 @@ func buildFromPNGAction(ctx *cli.Context, filename string, extra *fontDataSet) e
 			}
 		}
 	}
-	return buildMCM(ctx, chars, extra)
+	return buildMCM(output, chars, extra, opts)
+}
+
+func buildFromInput(output string, input string, fontData *fontDataSet, opts *buildOptions) error {
+	st, err := os.Stat(input)
+	if err != nil {
+		return err
+	}
+	if st.IsDir() {
+		return buildFromDir(output, input, fontData, opts)
+	}
+	return buildFromPNG(output, input, fontData, opts)
 }
 
 func buildAction(ctx *cli.Context) error {
 	if ctx.NArg() != 2 {
 		return errors.New("build requires 2 arguments, see help build")
 	}
-	input := ctx.Args().Get(0)
-	st, err := os.Stat(input)
+	opts, err := newBuildOptions(ctx)
 	if err != nil {
 		return err
 	}
+	input := ctx.Args().Get(0)
+	output := ctx.Args().Get(1)
 	fontData := newFontDataSet()
 	for _, e := range ctx.StringSlice("extra") {
 		if err := fontData.ParseFile(e); err != nil {
 			return err
 		}
 	}
-	if st.IsDir() {
-		return buildFromDirAction(ctx, input, fontData)
-	}
-	return buildFromPNGAction(ctx, input, fontData)
+	return buildFromInput(output, input, fontData, opts)
 }

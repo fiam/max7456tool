@@ -1,0 +1,26 @@
+# All paths are relative to the config file
+
+# Generate preview a png file as a preview
+# for every generated font unless it comes
+# from a png already
+previews: true
+# Shared extra data for all fonts
+extra:
+  - all.yaml
+
+# Default font comes from from this directory
+# (could be a .png too). Missing characters
+# from other fonts will be filled from this one
+default: default
+
+# List of all fonts, including the default one.
+fonts:
+  - source: default
+    extra: default.yaml
+    output: default.mcm # Optional. If empty will default to nonExt(source) + ".mcm"
+  - source: bold
+    extra: # Multiple extra data files
+      - bold1.yaml
+      - bold2.yaml
+  - source: large
+    extra: true # Extra data will be read from nonExt(source) + .yaml

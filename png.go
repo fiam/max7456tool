@@ -13,11 +13,8 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func pngAction(ctx *cli.Context) error {
-	if ctx.NArg() != 2 {
-		return errors.New("png requires 2 arguments, see help png")
-	}
-	mf, err := os.Open(ctx.Args().Get(0))
+func buildPNGFromMCM(ctx *cli.Context, output string, input string) error {
+	mf, err := os.Open(input)
 	if err != nil {
 		return err
 	}
@@ -79,7 +76,7 @@ func pngAction(ctx *cli.Context) error {
 	}
 
 	// Save to png
-	f, err := openOutputFile(ctx.Args().Get(1))
+	f, err := openOutputFile(output)
 	if err != nil {
 		return err
 	}
@@ -91,4 +88,13 @@ func pngAction(ctx *cli.Context) error {
 		return err
 	}
 	return nil
+}
+
+func pngAction(ctx *cli.Context) error {
+	if ctx.NArg() != 2 {
+		return errors.New("png requires 2 arguments, see help png")
+	}
+	input := ctx.Args().Get(0)
+	output := ctx.Args().Get(1)
+	return buildPNGFromMCM(ctx, output, input)
 }

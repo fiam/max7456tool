@@ -311,6 +311,13 @@ func (c *charBinaryData) Add(d interface{}) error {
 	return nil
 }
 
+func (c *charBinaryData) Clone() *charBinaryData {
+	return &charBinaryData{
+		Data:     append([]byte(nil), c.Data...),
+		Metadata: append([]byte(nil), c.Metadata...),
+	}
+}
+
 type fontDataSet struct {
 	dataSet map[int]*charBinaryData
 }
@@ -345,6 +352,16 @@ func (fs *fontDataSet) ParseFile(filename string) error {
 		}
 	}
 	return nil
+}
+
+func (fs *fontDataSet) Clone() *fontDataSet {
+	dataSet := make(map[int]*charBinaryData, len(fs.dataSet))
+	for k, v := range fs.dataSet {
+		dataSet[k] = v.Clone()
+	}
+	return &fontDataSet{
+		dataSet: dataSet,
+	}
 }
 
 /*

@@ -22,13 +22,40 @@ const (
 )
 
 var (
-	debugFlag  = false
-	appVersion string
+	verboseFlag = false
+	debugFlag   = false
+	appVersion  string
 )
 
 func main() {
 	app := cli.NewApp()
 	app.Version = appVersion
+	buildAndGenerateFlags := []cli.Flag{
+		&cli.BoolFlag{
+			Name:    "no-blanks",
+			Aliases: []string{"nb"},
+			Usage:   "Don't fill missing characters with blanks (used only for directory input)",
+		},
+		&cli.IntFlag{
+			Name:    "margin",
+			Aliases: []string{"m"},
+			Value:   defaultMargin,
+			Usage:   "Margin between each character (used only for image input)",
+		},
+		&cli.IntFlag{
+			Name:    "columns",
+			Aliases: []string{"c"},
+			Value:   defaultColumns,
+			Usage:   "Number of columns in the output image (used only for image input)",
+		},
+	}
+	var buildFlags []cli.Flag
+	buildFlags = append(buildFlags, buildAndGenerateFlags...)
+	buildFlags = append(buildFlags, &cli.StringSliceFlag{
+		Name:    "extra",
+		Aliases: []string{"e"},
+		Usage:   extraDataUsage,
+	})
 	app.Usage = "tool for managing .mcm character sets for MAX7456"
 	app.Flags = []cli.Flag{
 		&cli.BoolFlag{
@@ -36,6 +63,12 @@ func main() {
 			Aliases:     []string{"f"},
 			Usage:       "Overwrite output files without asking",
 			Destination: &forceFlag,
+		},
+		&cli.BoolFlag{
+			Name:        "verbose",
+			Aliases:     []string{"v"},
+			Usage:       "Enable verbose output",
+			Destination: &verboseFlag,
 		},
 		&cli.BoolFlag{
 			Name:        "debug",
@@ -62,31 +95,15 @@ func main() {
 			Name:      "build",
 			Usage:     "Build a .mcm from the files in the given directory or .png file",
 			ArgsUsage: "<input> <output.mcm>",
-			Flags: []cli.Flag{
-				&cli.BoolFlag{
-					Name:    "no-blanks",
-					Aliases: []string{"nb"},
-					Usage:   "Don't fill missing characters with blanks (used only for directory input)",
-				},
-				&cli.IntFlag{
-					Name:    "margin",
-					Aliases: []string{"m"},
-					Value:   defaultMargin,
-					Usage:   "Margin between each character (used only for image input)",
-				},
-				&cli.IntFlag{
-					Name:    "columns",
-					Aliases: []string{"c"},
-					Value:   defaultColumns,
-					Usage:   "Number of columns in the output image (used only for image input)",
-				},
-				&cli.StringSliceFlag{
-					Name:    "extra",
-					Aliases: []string{"e"},
-					Usage:   extraDataUsage,
-				},
-			},
-			Action: buildAction,
+			Flags:     buildFlags,
+			Action:    buildAction,
+		},
+		{
+			Name:      "generate",
+			Usage:     "Generate multiple fonts from a fonts.yaml file",
+			ArgsUsage: "<fonts.yaml> # See an example at https://github.com/fiam/max7456tool/example_fonts.yaml",
+			Flags:     buildAndGenerateFlags,
+			Action:    generateAction,
 		},
 		{
 			Name:      "png",
@@ -110,7 +127,7 @@ func main() {
 		},
 	}
 	if err := app.Run(os.Args); err != nil {
-		fmt.Fprint(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
