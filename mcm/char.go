@@ -190,6 +190,25 @@ func (c *Char) Equal(other *Char) bool {
 	return bytes.Equal(c.data, other.data)
 }
 
+// VisibleEqual returns true iff both characters have exactly
+// the same visible data (i.e. excluding the metadata)
+func (c *Char) VisibleEqual(other *Char) bool {
+	return bytes.Equal(c.data[:MinCharBytes], other.data[:MinCharBytes])
+}
+
+// MetadataIsBlank returns true iff the metadata section of the
+// character contains only transparent bytes.
+func (c *Char) MetadataIsBlank() bool {
+	if len(c.data) > MinCharBytes {
+		for _, b := range c.data[MinCharBytes:] {
+			if b != mcmTransparentByte {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func constantChar(b byte) *Char {
 	data := make([]byte, CharBytes)
 	for ii := range data {
