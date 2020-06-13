@@ -22,45 +22,33 @@ const (
 	mcmTransparentByte = 85
 )
 
+type charMap map[int]*mcm.Char
+
+type namedFont struct {
+	Name  string
+	Chars charMap
+}
+
 type buildOptions struct {
-	NoBlanks bool
-	Margin   int
-	Columns  int
+	NoBlanks         bool
+	Margin           int
+	Columns          int
+	RemoveDuplicates bool
 }
 
 func newBuildOptions(ctx *cli.Context) (*buildOptions, error) {
 	return &buildOptions{
-		NoBlanks: ctx.Bool("no-blanks"),
-		Margin:   ctx.Int("margin"),
-		Columns:  ctx.Int("columns"),
+		NoBlanks:         ctx.Bool("no-blanks"),
+		Margin:           ctx.Int("margin"),
+		Columns:          ctx.Int("columns"),
+		RemoveDuplicates: ctx.Bool("remove-duplicates"),
 	}, nil
 }
 
-func buildMCM(output string, chars map[int]*mcm.Char, extra *fontDataSet, opts *buildOptions) error {
-	if extra != nil {
-		for k, v := range extra.Values() {
-			if prev, found := chars[k]; found {
-				repl, err := v.MergeTo(prev)
-				if err != nil {
-					return fmt.Errorf("error merging binary data into existing character %d: %v", k, err)
-				}
-				chars[k] = repl
-			} else {
-				chr, err := v.Char()
-				if err != nil {
-					return fmt.Errorf("error decoding binary character %d: %v", k, err)
-				}
-				chars[k] = chr
-			}
-		}
-	}
+func buildMCM(output string, enc *mcm.Encoder) error {
 	f, err := openOutputFile(output)
 	if err != nil {
 		return err
-	}
-	enc := &mcm.Encoder{
-		Chars: chars,
-		Fill:  !opts.NoBlanks,
 	}
 	if err := enc.Encode(f); err != nil {
 		// Remove the file, since it can't be
@@ -115,10 +103,10 @@ func parseFilenameCharacterNums(nonExt string, im image.Image) ([]int, error) {
 	return nums, nil
 }
 
-func buildFromDir(output string, dir string, extra *fontDataSet, opts *buildOptions) error {
+func loadFontFromDir(dir string) (charMap, error) {
 	entries, err := ioutil.ReadDir(dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	chars := make(map[int]*mcm.Char)
 	for _, e := range entries {
@@ -132,30 +120,30 @@ func buildFromDir(output string, dir string, extra *fontDataSet, opts *buildOpti
 			filename := filepath.Join(dir, name)
 			imf, err := os.Open(filename)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			im, imfmt, err := image.Decode(imf)
 			if err != nil {
-				return fmt.Errorf("error decoding %s: %v", filename, err)
+				return nil, fmt.Errorf("error decoding %s: %v", filename, err)
 			}
 			if err := imf.Close(); err != nil {
-				return err
+				return nil, err
 			}
 			if imfmt != "png" {
-				return fmt.Errorf("%s: invalid image format %s, must be png", filename, imfmt)
+				return nil, fmt.Errorf("%s: invalid image format %s, must be png", filename, imfmt)
 			}
 			nonExt := name[:len(name)-len(ext)]
 			// Parse the name. It might contain multiple characters
 			nums, err := parseFilenameCharacterNums(nonExt, im)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			bounds := im.Bounds()
 			xw := bounds.Dx() / mcm.CharWidth
 			// Import each character
 			for ii, chNum := range nums {
 				if _, found := chars[chNum]; found {
-					return fmt.Errorf("duplicate character %d", chNum)
+					return nil, fmt.Errorf("duplicate character %d", chNum)
 				}
 				xc := ii % xw
 				yc := ii / xw
@@ -166,21 +154,21 @@ func buildFromDir(output string, dir string, extra *fontDataSet, opts *buildOpti
 				}
 				mcmCh, err := mcm.NewCharFromImage(im, x0, y0)
 				if err != nil {
-					return err
+					return nil, err
 				}
 				chars[chNum] = mcmCh
 
 			}
 		}
 	}
-	return buildMCM(output, chars, extra, opts)
+	return chars, nil
 }
 
 type subImager interface {
 	SubImage(r image.Rectangle) image.Image
 }
 
-func buildFromPNG(output string, filename string, extra *fontDataSet, opts *buildOptions) error {
+func loadFontFromPNG(filename string, opts *buildOptions) (charMap, error) {
 	cols := opts.Columns
 	margin := opts.Margin
 	rows := int(math.Ceil(float64(mcm.CharNum) / float64(cols)))
@@ -193,25 +181,25 @@ func buildFromPNG(output string, filename string, extra *fontDataSet, opts *buil
 
 	f, err := os.Open(filename)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer f.Close()
 
 	img, imfmt, err := image.Decode(f)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if imfmt != "png" {
-		return fmt.Errorf("%s: invalid image format %s, must be png", filename, imfmt)
+		return nil, fmt.Errorf("%s: invalid image format %s, must be png", filename, imfmt)
 	}
 
 	bounds := img.Bounds()
 	if bounds.Dx() != imageWidth {
-		return fmt.Errorf("invalid image width %d, must be %d", bounds.Dx(), imageWidth)
+		return nil, fmt.Errorf("invalid image width %d, must be %d", bounds.Dx(), imageWidth)
 	}
 	if bounds.Dy() != imageHeight {
 		if bounds.Dy() != extendedImageHeight {
-			return fmt.Errorf("invalid image height %d, must be %d (%d characters) or %d (%d characters)",
+			return nil, fmt.Errorf("invalid image height %d, must be %d (%d characters) or %d (%d characters)",
 				bounds.Dy(), imageHeight, mcm.CharNum, extendedImageHeight, mcm.ExtendedCharNum)
 		}
 		rows = extendedRows
@@ -234,25 +222,135 @@ func buildFromPNG(output string, filename string, extra *fontDataSet, opts *buil
 			sub := img.(subImager).SubImage(r)
 			chr, err := mcm.NewCharFromImage(sub, 0, 0)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if !chr.IsBlank() {
 				chars[chNum] = chr
 			}
 		}
 	}
-	return buildMCM(output, chars, extra, opts)
+	return chars, nil
 }
 
-func buildFromInput(output string, input string, fontData *fontDataSet, opts *buildOptions) error {
+func loadFontFromInput(input string, opts *buildOptions) (charMap, error) {
 	st, err := os.Stat(input)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	var chars charMap
 	if st.IsDir() {
-		return buildFromDir(output, input, fontData, opts)
+		chars, err = loadFontFromDir(input)
+	} else {
+		chars, err = loadFontFromPNG(input, opts)
 	}
-	return buildFromPNG(output, input, fontData, opts)
+	if err != nil {
+		return nil, err
+	}
+	return chars, nil
+}
+
+func charIsEqualEnough(src, dst *mcm.Char) bool {
+	if src.Equal(dst) {
+		return true
+	}
+	if src.VisibleEqual(dst) && dst.MetadataIsBlank() {
+		return true
+	}
+	return false
+}
+
+func buildFromInput(output string, input string, fontData *fontDataSet, parents []*namedFont, opts *buildOptions) (charMap, error) {
+	chars, err := loadFontFromInput(input, opts)
+	if err != nil {
+		return nil, err
+	}
+	enc := &mcm.Encoder{
+		Chars: chars,
+		Fill:  !opts.NoBlanks,
+	}
+
+	// Fill characters from parents (if any)
+
+	// Note that the child font might have only characters < 256, but the parent
+	// fonts might have a second page
+	charNum := enc.CharNum()
+	for _, p := range parents {
+		penc := &mcm.Encoder{Chars: p.Chars}
+		if penc.CharNum() > charNum {
+			charNum = penc.CharNum()
+		}
+	}
+	for ii := 0; ii < charNum; ii++ {
+		chr := chars[ii]
+		if chr != nil {
+			// Log a verbose message if this character is duplicated from any
+			for _, p := range parents {
+				if pchr := p.Chars[ii]; pchr != nil {
+					if charIsEqualEnough(pchr, chr) {
+						if opts.RemoveDuplicates {
+							// We can only remove duplicates from the child if it's
+							// a directory, otherwise it gets too messy
+							if filepath.Ext(input) == "" {
+								filename := filepath.Join(input, fmt.Sprintf("%03d.png", ii))
+								if err := os.Remove(filename); err != nil {
+									logVerbose("could not remove duplicate character %03d in %s: %v", ii, input, err)
+								} else {
+									logVerbose("removed duplicate character %03d in %s, since it's equal to its parent %s",
+										ii, input, p.Name)
+								}
+
+							} else {
+								logVerbose("not removing duplicate character %03d in %s because the source is an image - switch to a directory based format to use this option",
+									ii, input)
+							}
+						} else {
+							logVerbose("character %03d in %s is equal to parent font %s and can be removed",
+								ii, input, p.Name)
+						}
+					}
+				}
+			}
+		} else {
+			// Check if we can fill it from the parents
+			for _, p := range parents {
+				if pchr := p.Chars[ii]; pchr != nil {
+					logDebug("filling character %03d in %s from parent font %s", ii, output, p.Name)
+					// Check if we have different metadata for this character in the child font.
+					// In that case, we overwrite it.
+					charData := fontData.Values()[ii]
+					if charData != nil {
+					}
+					chars[ii] = pchr
+					break
+				}
+			}
+		}
+	}
+
+	// Apply extra font data
+	if fontData != nil {
+		for k, v := range fontData.Values() {
+			if prev, found := chars[k]; found {
+				repl, err := v.MergeTo(k, prev)
+				if err != nil {
+					return nil, fmt.Errorf("error merging binary data into existing character %d: %v", k, err)
+				}
+				chars[k] = repl
+			} else {
+				chr, err := v.Char()
+				if err != nil {
+					return nil, fmt.Errorf("error decoding binary character %d: %v", k, err)
+				}
+				logVerbose("creating new character %03d from extra data in font %s", k, input)
+				chars[k] = chr
+			}
+		}
+	}
+
+	if err := buildMCM(output, enc); err != nil {
+		return nil, err
+	}
+	return chars, nil
 }
 
 func buildAction(ctx *cli.Context) error {
@@ -271,5 +369,6 @@ func buildAction(ctx *cli.Context) error {
 			return err
 		}
 	}
-	return buildFromInput(output, input, fontData, opts)
+	_, err = buildFromInput(output, input, fontData, nil, opts)
+	return err
 }

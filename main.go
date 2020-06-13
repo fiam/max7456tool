@@ -56,6 +56,12 @@ func main() {
 		Aliases: []string{"e"},
 		Usage:   extraDataUsage,
 	})
+	var generateFlags []cli.Flag
+	generateFlags = append(generateFlags, buildAndGenerateFlags...)
+	generateFlags = append(generateFlags, &cli.BoolFlag{
+		Name:  "remove-duplicates",
+		Usage: "Remove duplicate characters that are the same in the child and parent font",
+	})
 	app.Usage = "tool for managing .mcm character sets for MAX7456"
 	app.Flags = []cli.Flag{
 		&cli.BoolFlag{
@@ -102,7 +108,7 @@ func main() {
 			Name:      "generate",
 			Usage:     "Generate multiple fonts from a fonts.yaml file",
 			ArgsUsage: "<fonts.yaml> # See an example at https://github.com/fiam/max7456tool/example_fonts.yaml",
-			Flags:     buildAndGenerateFlags,
+			Flags:     generateFlags,
 			Action:    generateAction,
 		},
 		{

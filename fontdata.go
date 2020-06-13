@@ -38,11 +38,31 @@ type charBinaryData struct {
 	Metadata []byte
 }
 
-func (c *charBinaryData) MergeTo(chr *mcm.Char) (*mcm.Char, error) {
+func (c *charBinaryData) MergeTo(n int, chr *mcm.Char) (*mcm.Char, error) {
 	if len(c.Data) > 0 {
-		return nil, errors.New("character has both visible extra data")
+		return nil, fmt.Errorf("character %03d has both visible extra data", n)
 	}
 	data := chr.Data()
+	if len(c.Metadata) > 0 {
+		logDebug("adding metadata %v to character %03d", c.Metadata, n)
+	}
+	if len(data) == mcm.CharBytes && len(c.Metadata) > 0 {
+		charMeta := data[mcm.MinCharBytes:]
+		overlappedMeta := charMeta[:len(c.Metadata)]
+		if bytes.Equal(overlappedMeta, c.Metadata) {
+			return nil, fmt.Errorf("redundant metadata in character %03d, it already has %v", n, c.Metadata)
+		}
+		isTransparent := true
+		for _, v := range charMeta {
+			if v != mcmTransparentByte {
+				isTransparent = false
+				break
+			}
+		}
+		if !isTransparent {
+			logVerbose("overriding metadata in %03d from %v to %v", n, charMeta, c.Metadata)
+		}
+	}
 	var buf bytes.Buffer
 	if _, err := buf.Write(data[:mcm.MinCharBytes]); err != nil {
 		return nil, err

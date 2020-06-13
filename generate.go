@@ -64,6 +64,33 @@ func (c *generateConfig) ExtraDataFiles() []string {
 	return files
 }
 
+func (c *generateConfig) defaultFont() (*generateFontConfig, error) {
+	if c.DefaultFont != "" {
+		for _, v := range c.Fonts {
+			if c.DefaultFont == v.Source {
+				return v, nil
+			}
+		}
+		// This should not happen due to validate(), but better
+		// be safe than sorry
+		return nil, fmt.Errorf("could not find default font %q", c.DefaultFont)
+	}
+	return nil, nil
+}
+
+func (c *generateConfig) Parents(cfg *generateFontConfig) ([]*generateFontConfig, error) {
+	var parents []*generateFontConfig
+	// The only parent font we support for now is the default font
+	def, err := c.defaultFont()
+	if err != nil {
+		return nil, err
+	}
+	if def != nil && def.Source != cfg.Source {
+		parents = append(parents, def)
+	}
+	return parents, nil
+}
+
 func (c *generateConfig) Load(filename string) error {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -74,10 +101,10 @@ func (c *generateConfig) Load(filename string) error {
 	}
 	// Store filename's directory for relative paths
 	c.Dir = filepath.Dir(filename)
-	return c.Validate()
+	return c.validate()
 }
 
-func (c *generateConfig) Validate() error {
+func (c *generateConfig) validate() error {
 	// Ensure all ExtraData files exist
 	for _, v := range c.ExtraDataFiles() {
 		st, err := os.Stat(v)
@@ -115,6 +142,71 @@ func (c *generateConfig) Validate() error {
 	return nil
 }
 
+func generateFont(ctx *cli.Context, globalFontData *fontDataSet, config *generateConfig,
+	font *generateFontConfig, opts *buildOptions, charMaps map[string]charMap) (charMap, error) {
+
+	// Check if this font was already built due to
+	// being the parent of a previous font
+	if m := charMaps[font.Source]; m != nil {
+		return m, nil
+	}
+	var parentFonts []*namedFont
+	parents, err := config.Parents(font)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range parents {
+		pmcm := charMaps[p.Source]
+		if pmcm == nil {
+			// Must generate the parent first
+			if _, err := generateFont(ctx, globalFontData, config, p, opts, charMaps); err != nil {
+				return nil, err
+			}
+			pmcm = charMaps[p.Source]
+			if pmcm == nil {
+				panic(fmt.Errorf("generating font for %q didn't fill its charMap entry", p.Source))
+			}
+		}
+		parentFonts = append(parentFonts, &namedFont{Name: p.Source, Chars: pmcm})
+	}
+
+	logVerbose("generating font from %q", font.Source)
+	p := filepath.Join(config.Dir, font.Source)
+	ext := filepath.Ext(p)
+	nonExt := p[:len(p)-len(ext)]
+	fontData := globalFontData.Clone()
+	extraDataFiles, err := font.ExtraDataFiles(config.Dir)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range extraDataFiles {
+		logVerbose("parsing extra data from %q", f)
+		if err := fontData.ParseFile(f); err != nil {
+			return nil, err
+		}
+	}
+	var output string
+	if font.Output != "" {
+		output = filepath.Join(config.Dir, font.Output)
+	} else {
+		output = nonExt + ".mcm"
+	}
+	logVerbose("generating font %q from %q", output, p)
+	charMap, err := buildFromInput(output, p, fontData, parentFonts, opts)
+	if err != nil {
+		return nil, err
+	}
+	if config.Previews {
+		pngOutput := nonExt + ".png"
+		logVerbose("generating preview image %q from %q", pngOutput, output)
+		if err := buildPNGFromMCM(ctx, pngOutput, output); err != nil {
+			return nil, err
+		}
+	}
+	charMaps[font.Source] = charMap
+	return charMap, nil
+}
+
 func generateAction(ctx *cli.Context) error {
 	if ctx.NArg() != 1 {
 		return errors.New("generate requires 1 argument, see help generate")
@@ -135,39 +227,13 @@ func generateAction(ctx *cli.Context) error {
 			return err
 		}
 	}
+	charMaps := make(map[string]charMap)
 	for _, v := range config.Fonts {
-		logVerbose("generating font from %q", v.Source)
-		p := filepath.Join(config.Dir, v.Source)
-		ext := filepath.Ext(p)
-		nonExt := p[:len(p)-len(ext)]
-		fontData := globalFontData.Clone()
-		extraDataFiles, err := v.ExtraDataFiles(config.Dir)
+		mcm, err := generateFont(ctx, globalFontData, &config, v, opts, charMaps)
 		if err != nil {
 			return err
 		}
-		for _, f := range extraDataFiles {
-			logVerbose("parsing extra data from %q", f)
-			if err := fontData.ParseFile(f); err != nil {
-				return err
-			}
-		}
-		var output string
-		if v.Output != "" {
-			output = filepath.Join(config.Dir, v.Output)
-		} else {
-			output = nonExt + ".mcm"
-		}
-		logVerbose("generating font %q from %q", output, p)
-		if err := buildFromInput(output, p, fontData, opts); err != nil {
-			return err
-		}
-		if config.Previews {
-			pngOutput := nonExt + ".png"
-			logVerbose("generating preview image %q from %q", pngOutput, output)
-			if err := buildPNGFromMCM(ctx, pngOutput, output); err != nil {
-				return err
-			}
-		}
+		charMaps[v.Source] = mcm
 	}
 	return nil
 }
