@@ -1,6 +1,7 @@
 package mcm
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/color"
@@ -181,6 +182,12 @@ func (c *Char) IsBlank() bool {
 		}
 	})
 	return blank
+}
+
+// Equal returns true iff both characters have exactly
+// the same underlying data.
+func (c *Char) Equal(other *Char) bool {
+	return bytes.Equal(c.data, other.data)
 }
 
 func constantChar(b byte) *Char {
