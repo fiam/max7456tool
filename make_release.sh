@@ -16,16 +16,24 @@ for v in ${GO_OSARCH}; do
 	GOOS=${GOOS} GOARCH=${GOARCH} go build -ldflags "-X \"main.appVersion=${VERSION}\""
 	exe=max7456tool
 	rel=max7456tool_${TAG}_${GOOS}_${GOARCH}
+	zip=${rel}.zip
+	tgz=${rel}.tar.gz
 	if [ ${GOOS} = "windows" ]; then
-		exe=${exe}.exe
-		zip=${rel}.zip
-		zip ${zip} ${exe}
-		mv ${zip} dist
-	else
-		tgz=${rel}.tar.gz
+	    exe=${exe}.exe
+	    zip ${zip} ${exe}
+            dist=${zip}
+        elif [ ${GOOS} = "darwin" ]; then
+            if ! [ -z ${CODESIGN} ]; then
+                macapptool sign ${exe}
+                macapptool notarize -u "${NOTARIZATION_USERNAME}" -p "${NOTARIZATION_PASSWORD}" ${exe}
+            fi
+            zip ${zip} ${exe}
+            dist=${zip}
+        else
 		tar czf ${tgz} ${exe}
-		mv ${tgz} dist
+                dist=${tgz}
 	fi
+        mv ${dist} dist
 done
 
 go clean
