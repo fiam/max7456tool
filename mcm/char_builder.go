@@ -28,9 +28,9 @@ func (b *charBuilder) IsComplete() bool {
 }
 
 func (b *charBuilder) AppendPixel(p Pixel) error {
-	if p.isTransparent() {
-		p = PixelTransparent
-	}
+	// Don't rewrite pixels. That would be problematic for OSDs
+	// that do understand 11 as gray and/or use the metadata
+	// (e.g. FrSkyOSD)
 	if p > 3 {
 		return fmt.Errorf("invalid pixel %v > 3", p)
 	}
