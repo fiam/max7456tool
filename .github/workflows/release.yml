@@ -3,9 +3,8 @@ name: Publish release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 jobs:
-
   publish:
     strategy:
       matrix:
@@ -21,10 +20,10 @@ jobs:
 
       - name: Set GOPATH, PATH and ENV
         run: |
-          echo "::set-env name=GOPATH::$(dirname $GITHUB_WORKSPACE)"
-          echo "::set-env name=GO111MODULE::on"
-          echo "::set-env name=GOPROXY::https://proxy.golang.org"
-          echo "::add-path::$(dirname $GITHUB_WORKSPACE)/bin"
+          echo "GOPATH=$(dirname $GITHUB_WORKSPACE)" >> $GITHUB_ENV
+          echo "GO111MODULE=on" >> $GITHUB_ENV
+          echo "GOPROXY=https://proxy.golang.org" >> $GITHUB_ENV
+          echo "$(dirname $GITHUB_WORKSPACE)/bin" >> $GITHUB_PATH
         shell: bash
 
       - name: Checkout Code
