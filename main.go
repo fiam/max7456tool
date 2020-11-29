@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v2"
 )
 
 const (
@@ -130,6 +130,19 @@ func main() {
 				},
 			},
 			Action: pngAction,
+		},
+		{
+			Name:      "bin",
+			Usage:     "Generate a raw .bin font file from a .mcm",
+			ArgsUsage: "<input.mcm> <output.bin>",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:    flipHorizontalPixelsFlagName,
+					Aliases: []string{"fhp"},
+					Usage:   "Flip order of horizontal pixels in each row",
+				},
+			},
+			Action: binAction,
 		},
 	}
 	if err := app.Run(os.Args); err != nil {
